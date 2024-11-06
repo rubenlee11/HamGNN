@@ -165,9 +165,6 @@ double Poisson(int fft_charge_flag,
   return time0;
 }
 
-
-
-
 void FFT_Poisson(double *ReRhor, double *ImRhor, 
                  double *ReRhok, double *ImRhok) 
 {

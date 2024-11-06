@@ -6,6 +6,8 @@
 #include "read_scfout_YZ.h"
 void read_scfout(char *argv[]);
 
+//gcc -o read_openmx read_openmx.c  
+
 #define MAX_LINE_SIZE 256
 #define fp_bsize 1048576 /* buffer size for setvbuf */
 #define SCFOUT_VERSION 3
@@ -124,6 +126,7 @@ void Input(FILE *fp)
 		}
 		if (i_vec[1] == 0 && i_vec[1] < 0 || i_vec[1] > (LATEST_VERSION)*4 + 3)
 		{
+			printf("%d\n",i_vec[1]);
 			puts("Error: Mismatch of the endianness");
 			fflush(stdout);
 			exit(1);
@@ -134,7 +137,7 @@ void Input(FILE *fp)
 		conversionSwitch = 0;
 	}
 	/* ***/
-
+	
 	atomnum = i_vec[0];
 
 	/* Disabled by N. Yamaguchi ***
@@ -560,6 +563,37 @@ void Input(FILE *fp)
 		}
 	}
 
+	// added by Xiwen Li
+	Hlr = (double *****)malloc(sizeof(double ****) * (atomnum + 1));
+	for(int idx_P = 0; idx_P <= atomnum; idx_P++){
+		Hlr[idx_P] = (double ****)malloc(sizeof(double ***) *(atomnum + 1));
+		for (ct_AN = 0; ct_AN <= atomnum; ct_AN++)
+		{
+			TNO1 = Total_NumOrbs[ct_AN];
+			Hlr[idx_P][ct_AN] = (double ***)malloc(sizeof(double **) * (FNAN[ct_AN] + 1));
+			for (h_AN = 0; h_AN <= FNAN[ct_AN]; h_AN++)
+			{
+				Hlr[idx_P][ct_AN][h_AN] = (double **)malloc(sizeof(double *) * TNO1);
+
+				if (ct_AN == 0)
+				{
+					TNO2 = 1;
+				}
+				else
+				{
+					Gh_AN = natn[ct_AN][h_AN];
+					TNO2 = Total_NumOrbs[Gh_AN];
+				}
+				for (i = 0; i < TNO1; i++)
+				{
+					Hlr[idx_P][ct_AN][h_AN][i] = (double *)malloc(sizeof(double) * TNO2);
+				}
+			}
+		}
+	}
+
+
+
 	DM = (double *****)malloc(sizeof(double ****) * (SpinP_switch + 1));
 	for (spin = 0; spin <= SpinP_switch; spin++)
 	{
@@ -685,6 +719,24 @@ void Input(FILE *fp)
 				FREAD(OLP[ct_AN][h_AN][i], sizeof(double), TNO2, fp);
 			}
 		}
+	}
+	
+	// added by Xiwen Li
+	// Hlr
+	for( int idx_P = 1;idx_P<=atomnum;idx_P++){
+	for (ct_AN = 1; ct_AN <= atomnum; ct_AN++)
+	{
+		TNO1 = Total_NumOrbs[ct_AN];
+		for (h_AN = 0; h_AN <= FNAN[ct_AN]; h_AN++)
+		{
+			Gh_AN = natn[ct_AN][h_AN];
+			TNO2 = Total_NumOrbs[Gh_AN];
+			for (i = 0; i < TNO1; i++)
+			{
+				FREAD(Hlr[1][ct_AN][h_AN][i], sizeof(double), TNO2, fp);
+			}
+		}
+	}
 	}
 
 	// Added by Yang Zhong
@@ -821,9 +873,8 @@ int main(int argc, char *argv[])
 	static FILE *fp_json;
 
 	double Ebond[30], Es, Ep;
-
+	
 	read_scfout(argv);
-
 	/*打开json文件*/
 	fp_json = fopen("HS.json", "w");
 	if (fp_json == NULL)
@@ -1312,6 +1363,103 @@ int main(int argc, char *argv[])
 			{
 				fprintf(fp_json, "],");
 			}
+		}
+	}
+	fprintf(fp_json, "],\n");
+
+	// 打印Hlr added by Xiwen Li. 
+	int idx_P;
+	fprintf(fp_json, "\"Hlron\": [");
+ 	for (idx_P = 1; idx_P<=atomnum;idx_P++){
+		fprintf(fp_json, "[");
+		for (ct_AN = 1; ct_AN <= atomnum; ct_AN++)
+		{
+			TNO1 = Total_NumOrbs[ct_AN];
+			for (h_AN = 0; h_AN <= 0; h_AN++)
+			{
+				Gh_AN = natn[ct_AN][h_AN];
+				Rn = ncn[ct_AN][h_AN];
+				TNO2 = Total_NumOrbs[Gh_AN];
+				fprintf(fp_json, "[");
+				for (i = 0; i < TNO1; i++)
+				{
+					for (j = 0; j < TNO2; j++)
+					{
+						if (i == TNO1 - 1 && j == TNO2 - 1)
+						{
+							fprintf(fp_json, "%14.10f", Hlr[idx_P][ct_AN][h_AN][i][j]);
+						}
+						else
+						{
+							fprintf(fp_json, "%14.10f,", Hlr[idx_P][ct_AN][h_AN][i][j]);
+						}
+					}
+				}
+				if (ct_AN == atomnum)
+				{
+					fprintf(fp_json, "]");
+				}
+				else
+				{
+					fprintf(fp_json, "],");
+				}
+			}
+		}	
+		if (idx_P == atomnum)
+		{
+			fprintf(fp_json, "]");
+		}
+		else
+		{
+			fprintf(fp_json, "],");
+		}		
+	}
+	fprintf(fp_json, "],\n");
+
+	fprintf(fp_json, "\"Hlroff\": [");
+	for (idx_P = 1; idx_P<=atomnum;idx_P++)
+	{
+		fprintf(fp_json, "[");
+		for (ct_AN = 1; ct_AN <= atomnum; ct_AN++)
+		{
+			TNO1 = Total_NumOrbs[ct_AN];
+			for (h_AN = 1; h_AN <= FNAN[ct_AN]; h_AN++)
+			{
+				Gh_AN = natn[ct_AN][h_AN];
+				Rn = ncn[ct_AN][h_AN];
+				TNO2 = Total_NumOrbs[Gh_AN];
+				fprintf(fp_json, "[");
+				for (i = 0; i < TNO1; i++)
+				{
+					for (j = 0; j < TNO2; j++)
+					{
+						if (i == TNO1 - 1 && j == TNO2 - 1)
+						{
+							fprintf(fp_json, "%14.10f", Hlr[idx_P][ct_AN][h_AN][i][j]);
+						}
+						else
+						{
+							fprintf(fp_json, "%14.10f,", Hlr[idx_P][ct_AN][h_AN][i][j]);
+						}
+					}
+				}
+				if (ct_AN == atomnum && h_AN == FNAN[ct_AN])
+				{
+					fprintf(fp_json, "]");
+				}
+				else
+				{
+					fprintf(fp_json, "],");
+				}
+			}
+		}
+		if (idx_P == atomnum)
+		{
+			fprintf(fp_json, "]");
+		}
+		else
+		{
+			fprintf(fp_json, "],");
 		}
 	}
 	fprintf(fp_json, "]\n");

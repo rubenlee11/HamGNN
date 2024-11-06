@@ -81,8 +81,14 @@ void Make_VNA_Grid();
 void set_O_nm(double ****O);
 void output_O_nm(double ****O, double ****OLP, double *****Hks);
 void output_atomic_orbitals();
-void Print_CubeTitle(FILE *fp, int EigenValue_flag, double EigenValue);
-void Print_CubeCData_MO(FILE *fp, dcomplex *data, char *op);
+static void Print_CubeTitle(FILE *fp, int EigenValue_flag, double EigenValue);
+static void Print_CubeCData_MO(FILE *fp, dcomplex *data, char *op);
+static void Set_initial_Hamiltonian(char *mode,
+                             int SCF_iter,
+                             int Cnt_kind,
+                             double *****H0,
+                             double *****HNL,
+                             double *****H);
 #ifdef kcomp
 double ****Allocate4D_double(int size_1, int size_2, int size_3, int size_4);
 void Free4D_double(double ****buffer);
@@ -92,6 +98,10 @@ void Free4D_double(double ****buffer);
 #endif
 void Free_truncation(int CpyN, int TN, int Free_switch);
 int Set_Periodic(int CpyN, int Allocate_switch);
+void Set_Hlr();
+void Calc_MatrixElements_Vlr(int idx_P);
+double Calc_Vlr();
+static void Data_Grid_Copy_B2C_XiwenLi(double *data_B, double *data_C);
 
 int main(int argc, char *argv[])
 {
@@ -771,17 +781,21 @@ int main(int argc, char *argv[])
       input_int("postprocess", &postprocess, 1);
       input_close();
 
-      if (postprocess == 1) // calculate overlap matrices
+      if (postprocess == 1) // calculate overlap matrices,added by Yang Zhong
       {
         if (myid == Host_ID)
-          printf("\n Calculate S and H0 ...\n");
+          printf("\n Calculate S, H0 and Hlr ...\n");
         CompTime[myid][3] += DFT(MD_iter, (MD_iter - 1) % orbitalOpt_per_MDIter + 1);
         Set_initial_Hamiltonian("stdout", 1, 0, H0, HNL, H);
         Set_Orbitals_Grid(0);
+        Calc_Vlr();
+        Set_Hlr();
         if (HS_fileout == 1)
           SCF2File("write", argv[1]);
         if (myid == Host_ID)
-          printf("\n Finish calculating S & H0\n");
+        {
+          printf("\n Finish calculating S & H0 & Hlr\n");           
+        }      
         MPI_Barrier(MPI_COMM_WORLD);
         MPI_Finalize();
         return 0;
@@ -1005,13 +1019,183 @@ int main(int argc, char *argv[])
 }
 
 
+// added by Xiwen Li
+void Set_Hlr(){  
+  int Mc_AN;
+  for (Mc_AN=1; Mc_AN<=Matomnum; Mc_AN++){
+    Calc_MatrixElements_Vlr(Mc_AN);
+  }
+}
+
+void Calc_MatrixElements_Vlr(int idx_P){
+  // calculate < | Vlr[idx_P] | >
+  int Mc_AN,Gc_AN,Mh_AN,h_AN,Gh_AN;
+  int Nh0,Nh1,Nh2,Nh3;
+  int Nc0,Nc1,Nc2,Nc3;
+  int MN0,MN1,MN2,MN3;
+  int Nloop,OneD_Nloop;
+  int *OneD2spin,*OneD2Mc_AN,*OneD2h_AN;
+  int numprocs,myid;
+  double time0,time1,time2,mflops;
+
+  MPI_Comm_size(mpi_comm_level1,&numprocs);
+  MPI_Comm_rank(mpi_comm_level1,&myid);
+
+  /* one-dimensionalization of loops */
+
+  Nloop = 0;
+  for (Mc_AN=1; Mc_AN<=Matomnum; Mc_AN++){
+    Gc_AN = M2G[Mc_AN];    
+    for (h_AN=0; h_AN<=FNAN[Gc_AN]; h_AN++){
+      Nloop++;
+    }
+  }
+
+  OneD2Mc_AN = (int*)malloc(sizeof(int)*Nloop);
+  OneD2h_AN = (int*)malloc(sizeof(int)*Nloop);
+
+  Nloop = 0;
+  for (Mc_AN=1; Mc_AN<=Matomnum; Mc_AN++){
+    Gc_AN = M2G[Mc_AN];    
+    for (h_AN=0; h_AN<=FNAN[Gc_AN]; h_AN++){
+
+      OneD2Mc_AN[Nloop] = Mc_AN;
+      OneD2h_AN[Nloop] = h_AN;
+      Nloop++;
+    }
+  }
+
+  OneD_Nloop = Nloop;
+
+  /* numerical integration */
+
+#pragma omp parallel 
+  {
+    int Nloop,spin,Mc_AN,h_AN,Gh_AN,Mh_AN,Hwan,NOLG;
+    int Gc_AN,Cwan,NO0,NO1,spin0=-1,Mc_AN0=0;
+    int i,j,Nc,MN,GNA,Nog,Nh,OMPID,Nthrds;
+    int M,N,K,lda,ldb,ldc,ii,jj;
+    double alpha,beta,Vpot;
+    double sum0,sum1,sum2,sum3,sum4;
+    double *ChiV0,*Chi1,*ChiV0_2,*C;
+
+    /* allocation of arrays */
+
+    /* AITUNE */
+    double **AI_tmpH;
+    {
+      /* get size of temporary buffer */
+      int AI_MaxNO = 0;
+      int spe;
+      for(spe = 0; spe < SpeciesNum; spe++){
+        if(AI_MaxNO < Spe_Total_NO[spe]){ AI_MaxNO = Spe_Total_NO[spe];}
+      }
+		
+      int spin;
+
+      AI_tmpH = (double**)malloc(sizeof(double*)*AI_MaxNO);
+
+      int i;
+      double *p = (double*)malloc(sizeof(double)*AI_MaxNO*AI_MaxNO);
+      for(i = 0; i < AI_MaxNO; i++){
+        AI_tmpH[i] = p;
+        p += AI_MaxNO;
+      }
+    }
+    /* AITUNE */
+
+    /* starting of one-dimensionalized loop */
+
+#pragma omp for schedule(static,1)  /* guided */  /* AITUNE */
+  for (Nloop = 0; Nloop < OneD_Nloop; Nloop++){ /* AITUNE */
+    int Mc_AN = OneD2Mc_AN[Nloop];
+    int h_AN = OneD2h_AN[Nloop];
+    int Gc_AN = M2G[Mc_AN];    
+    int Gh_AN = natn[Gc_AN][h_AN];
+    int Mh_AN = F_G2M[Gh_AN];
+    int Cwan = WhatSpecies[Gc_AN];
+    int Hwan = WhatSpecies[Gh_AN];
+    int GNA = GridN_Atom[Gc_AN];
+    int NOLG = NumOLG[Mc_AN][h_AN]; 
+
+    int NO0,NO1;
+    NO0 = Spe_Total_NO[Cwan];
+    NO1 = Spe_Total_NO[Hwan];
+    /* quadrature for Hlr[idx_P]ij  */
+
+    /* AITUNE change order of loop */
+
+    /* AITUNE temporary buffer for "unroll-Jammed" HLO optimization by Intel */
+    
+    int i;
+    for (i=0; i<NO0; i++){
+      int j;
+      for (j=0; j<NO1; j++){
+        AI_tmpH[i][j] = Hlr[idx_P][Mc_AN][h_AN][i][j];
+      }
+    }
+
+    int Nog;
+    for (Nog=0; Nog<NOLG; Nog++){
+      int Nc = GListTAtoms1[Mc_AN][h_AN][Nog];
+      int MN = MGridListAtom[Mc_AN][Nc];
+      int Nh = GListTAtoms2[Mc_AN][h_AN][Nog];
+      
+      double AI_tmp_GVVG = GridVol * Vlr_Grid[idx_P][MN];
+
+      if (G2ID[Gh_AN]==myid){
+        int i;
+        for (i=0; i<NO0; i++){
+
+          double AI_tmp_i = AI_tmp_GVVG * Orbs_Grid[Mc_AN][Nc][i];
+          int j;
+
+          for (j=0; j<NO1; j++){
+      AI_tmpH[i][j] += AI_tmp_i * Orbs_Grid[Mh_AN][Nh][j];
+          }		
+        }
+        
+      }else{
+        int i;
+        for (i=0; i<NO0; i++){
+            
+          double AI_tmp_i = AI_tmp_GVVG * Orbs_Grid[Mc_AN][Nc][i];
+          int j;
+
+          for (j=0; j<NO1; j++){
+      AI_tmpH[i][j] += AI_tmp_i * Orbs_Grid_FNAN[Mc_AN][h_AN][Nog][j];
+          }
+        }
+      }
+      
+    }/* Nog */
+    
+    for (i=0; i<NO0; i++){
+      int j;
+      for (j=0; j<NO1; j++){
+        Hlr[idx_P][Mc_AN][h_AN][i][j] = AI_tmpH[i][j];
+      }
+    }
+    /* AITUNE change order of loop */
+  } /* Nloop */
+
+    /* freeing of arrays */
+    free(AI_tmpH[0]);
+    free(AI_tmpH);
+  } /* pragma omp parallel */ 
+
+  /* freeing of arrays */
+
+  free(OneD2Mc_AN);
+  free(OneD2h_AN);
+}
+
 void Set_initial_Hamiltonian(char *mode,
-                             int SCF_iter,
-                             int Cnt_kind,
+                            int SCF_iter,
+                            int Cnt_kind,
                              double *****H0,
                              double *****HNL,
-                             double *****H)
-{
+                             double *****H){
   /***************************************************************
     Cnt_kind
       0:  Uncontracted Hamiltonian
@@ -1323,3 +1507,209 @@ void Free3D_double(double ***p)
   free(p);
   p = NULL;
 }
+
+// added by Xiwen Li
+double Calc_Vlr(){
+  int k1,k2,k3;
+  int N2D,GNs,GN,BN_CB,BN_AB;
+  int N3[4];
+  double time0,Rc;
+  double tmp0,sk1,sk2,sk3;
+  double Gx,Gy,Gz,fac_invG2; 
+  double TStime,TEtime,etime;
+  int numprocs,myid,tag=999,ID,IDS,IDR;
+  MPI_Status stat;
+  MPI_Request request;
+
+	int idx_P;
+	double **ReVlrk, **ImVlrk;
+  double KK,sigma,thx,thy,thz;
+
+
+  /* MPI */
+  MPI_Comm_size(mpi_comm_level1,&numprocs);
+  MPI_Comm_rank(mpi_comm_level1,&myid);
+
+  if (myid==Host_ID && 0<level_stdout){
+    printf("Calculate Hlr using FFT...\n");
+  }
+
+  MPI_Barrier(mpi_comm_level1);
+  dtime(&TStime);
+	
+	/* allocation of arrays */
+  ReVlrk = (double *)malloc(sizeof(double*)*(Matomnum+MatomnumF+MatomnumS+2));
+  ImVlrk = (double *)malloc(sizeof(double*)*(Matomnum+MatomnumF+MatomnumS+2));
+	for(idx_P=1;idx_P<=(Matomnum+MatomnumF+MatomnumS+1);idx_P++){
+		ReVlrk[idx_P] = (double*)malloc(sizeof(double)*My_Max_NumGridB); 
+		ImVlrk[idx_P] = (double*)malloc(sizeof(double)*My_Max_NumGridB); 	
+	}  
+	/****************************************************
+		  find the long range potential in reciprocal space
+	****************************************************/  
+  sigma = 1.0;
+
+	/* set ReVlrk and ImVlrk */
+  tmp0 = 4.*PI/Cell_Volume;
+
+  N2D = Ngrid3*Ngrid2;
+  GNs = ((myid*N2D+numprocs-1)/numprocs)*Ngrid1;	
+	
+  for(idx_P=1;idx_P<=(Matomnum+MatomnumF+MatomnumS+1);idx_P++){
+    for (BN_CB=0; BN_CB<My_NumGridB_CB; BN_CB++){
+
+      GN = BN_CB + GNs;     
+      k3 = GN/(Ngrid2*Ngrid1);    
+      k2 = (GN - k3*Ngrid2*Ngrid1)/Ngrid1;
+      k1 = GN - k3*Ngrid2*Ngrid1 - k2*Ngrid1; 
+
+      if (k1<Ngrid1/2) sk1 = (double)k1;
+      else             sk1 = (double)(k1 - Ngrid1);
+
+      if (k2<Ngrid2/2) sk2 = (double)k2;
+      else             sk2 = (double)(k2 - Ngrid2);
+
+      if (k3<Ngrid3/2) sk3 = (double)k3;
+      else             sk3 = (double)(k3 - Ngrid3);
+
+      Gx = sk1*rtv[1][1] + sk2*rtv[2][1] + sk3*rtv[3][1];
+      Gy = sk1*rtv[1][2] + sk2*rtv[2][2] + sk3*rtv[3][2]; 
+      Gz = sk1*rtv[1][3] + sk2*rtv[2][3] + sk3*rtv[3][3];     
+
+      KK = Gx*Gx + Gy*Gy + Gz*Gz;
+      thx = -Gx*Gxyz[idx_P][1];thy = -Gy*Gxyz[idx_P][2];thz = -Gz*Gxyz[idx_P][3];
+      if(KK>0){
+        ReVlrk[idx_P][BN_CB] = tmp0/KK*exp(-sigma*sigma*KK/2.)*cos(thx+thy+thz);
+        ImVlrk[idx_P][BN_CB] = -tmp0/KK*exp(-sigma*sigma*KK/2.)*sin(thx+thy+thz);
+      }
+      else{
+        ReVlrk[idx_P][BN_CB] = 0.0;
+        ImVlrk[idx_P][BN_CB] = 0.0;
+      }
+    }
+  }
+	
+	/****************************************************
+		  find the long range potential in real space
+	****************************************************/
+  for(idx_P=1;idx_P<=(Matomnum+MatomnumF+MatomnumS+1);idx_P++){
+    Get_Value_inReal(0,Vlr_Grid_B[idx_P],Vlr_Grid_B[idx_P],ReVlrk[idx_P],ImVlrk[idx_P]);
+    // copy from partition B to partition C
+    Data_Grid_Copy_B2C_XiwenLi(Vlr_Grid_B[idx_P], Vlr_Grid[idx_P]);    
+  }
+  
+  /* for time */
+  MPI_Barrier(mpi_comm_level1);
+  dtime(&TEtime);
+  time0 = TEtime - TStime;
+  return time0;
+}
+
+static void Data_Grid_Copy_B2C_XiwenLi(double *data_B, double *data_C){
+  static int firsttime=1;
+  int CN,BN,LN,spin,i,gp,NN_S,NN_R;
+  double *Work_Array_Snd_Grid_B2C;
+  double *Work_Array_Rcv_Grid_B2C;
+  int numprocs,myid,tag=999,ID,IDS,IDR;
+  MPI_Status stat;
+  MPI_Request request;
+  MPI_Status *stat_send;
+  MPI_Status *stat_recv;
+  MPI_Request *request_send;
+  MPI_Request *request_recv;
+
+  MPI_Comm_size(mpi_comm_level1,&numprocs);
+  MPI_Comm_rank(mpi_comm_level1,&myid);
+
+  /* allocation of arrays */
+  
+  Work_Array_Snd_Grid_B2C = (double*)malloc(sizeof(double)*GP_B2C_S[NN_B2C_S]); 
+  Work_Array_Rcv_Grid_B2C = (double*)malloc(sizeof(double)*GP_B2C_R[NN_B2C_R]); 
+
+  /******************************************************
+             MPI: from the partitions B to C
+  ******************************************************/
+
+  request_send = malloc(sizeof(MPI_Request)*NN_B2C_S);
+  request_recv = malloc(sizeof(MPI_Request)*NN_B2C_R);
+  stat_send = malloc(sizeof(MPI_Status)*NN_B2C_S);
+  stat_recv = malloc(sizeof(MPI_Status)*NN_B2C_R);
+
+  NN_S = 0;
+  NN_R = 0;
+
+  /* MPI_Irecv */
+
+  for (ID=0; ID<NN_B2C_R; ID++){
+
+    IDR = ID_NN_B2C_R[ID];
+    gp = GP_B2C_R[ID];
+
+    if (IDR!=myid){ 
+      MPI_Irecv( &Work_Array_Rcv_Grid_B2C[gp], Num_Rcv_Grid_B2C[IDR],
+                 MPI_DOUBLE, IDR, tag, mpi_comm_level1, &request_recv[NN_R]);
+      NN_R++;
+    }
+
+  }
+
+  /* MPI_Isend */
+
+  for (ID=0; ID<NN_B2C_S; ID++){
+
+    IDS = ID_NN_B2C_S[ID];
+    gp = GP_B2C_S[ID];
+
+    /* copy Vlr_Grid_B to Work_Array_Snd_Grid_B2C */
+
+    for (LN=0; LN<Num_Snd_Grid_B2C[IDS]; LN++){
+      BN = Index_Snd_Grid_B2C[IDS][LN];
+      Work_Array_Snd_Grid_B2C[gp+LN] = data_B[BN];
+
+
+    } /* LN */        
+
+    if (IDS!=myid){
+      MPI_Isend( &Work_Array_Snd_Grid_B2C[gp], Num_Snd_Grid_B2C[IDS], 
+		 MPI_DOUBLE, IDS, tag, mpi_comm_level1, &request_send[NN_S]);
+      NN_S++;
+    }
+  }
+
+  /* MPI_Waitall */
+
+  if (NN_S!=0) MPI_Waitall(NN_S,request_send,stat_send);
+  if (NN_R!=0) MPI_Waitall(NN_R,request_recv,stat_recv);
+
+  free(request_send);
+  free(request_recv);
+  free(stat_send);
+  free(stat_recv);
+
+  /* copy Work_Array_Rcv_Grid_B2C to data_C */
+
+  for (ID=0; ID<NN_B2C_R; ID++){
+
+    IDR = ID_NN_B2C_R[ID];
+
+    if (IDR==myid){
+      gp = GP_B2C_S[ID];
+      for (LN=0; LN<Num_Rcv_Grid_B2C[IDR]; LN++){
+        CN = Index_Rcv_Grid_B2C[IDR][LN];
+        data_C[CN] = Work_Array_Snd_Grid_B2C[gp+LN];
+      } /* LN */   
+
+    }
+    else {
+      gp = GP_B2C_R[ID];
+      for (LN=0; LN<Num_Rcv_Grid_B2C[IDR]; LN++){
+	      CN = Index_Rcv_Grid_B2C[IDR][LN];
+        data_C[CN] = Work_Array_Rcv_Grid_B2C[gp+LN];
+      }
+    }
+  }
+  /* freeing of arrays */
+  free(Work_Array_Snd_Grid_B2C);
+  free(Work_Array_Rcv_Grid_B2C);
+}
+

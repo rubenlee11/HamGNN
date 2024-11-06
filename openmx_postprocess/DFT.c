@@ -264,7 +264,11 @@ double DFT(int MD_iter, int Cnt_Now)
     }
     time12 = Set_ProExpn_VNA(HVNA, HVNA2, DS_VNA);
   }
-
+  
+  // added by Xiwen Li. Calculate Vlr
+  Calc_Vlr();
+  
+  
   return 0; // added by Yang Zhong
   
   /* SCF loop */

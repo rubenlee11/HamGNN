@@ -1071,6 +1071,41 @@ double truncation(int MD_iter,int UCell_flag)
       }
     }
   }
+  
+  // added by Xiwen Li
+  Hlr = (double*****)malloc(sizeof(double****)*(Matomnum+MatomnumF+MatomnumS+2));
+  for(int p =0; p<(Matomnum+MatomnumF+MatomnumS+2); p++){
+	Hlr[p] = (double****)malloc(sizeof(double***)*(Matomnum+MatomnumF+MatomnumS+2));
+	for(Mc_AN = 0;Mc_AN<(Matomnum+MatomnumF+MatomnumS+2); Mc_AN++){
+		if (Mc_AN==0){
+			Gc_AN = 0;
+			tno0 = 1;
+		}
+		else{
+			Gc_AN = S_M2G[Mc_AN];
+			Cwan = WhatSpecies[Gc_AN];
+			tno0 = Spe_Total_NO[Cwan];  
+		}    		
+		Hlr[p][Mc_AN] = (double***)malloc(sizeof(double**)*(FNAN[Mc_AN]+1)); 
+		for (h_AN=0; h_AN<=FNAN[Gc_AN]; h_AN++){
+
+			if (Mc_AN==0){
+				tno1 = 1;  
+			}
+			else{
+				Gh_AN = natn[Gc_AN][h_AN];
+				Hwan = WhatSpecies[Gh_AN];
+				tno1 = Spe_Total_NO[Hwan];
+			} 
+
+			Hlr[p][Mc_AN][h_AN] = (double**)malloc(sizeof(double*)*tno0); 
+			for (i=0; i<tno0; i++){
+				Hlr[p][Mc_AN][h_AN][i] = (double*)malloc(sizeof(double)*tno1); 
+				for (j=0; j<tno1; j++) Hlr[p][Mc_AN][h_AN][i][j] = 0.0;
+			}		
+		}
+	}
+  }
 
   /*** added by Ohwaki ***/
 
@@ -3011,9 +3046,14 @@ double truncation(int MD_iter,int UCell_flag)
     }
 
     RefVxc_Grid = (double*)malloc(sizeof(double)*N); 
-
     dVHart_Grid = (double*)malloc(sizeof(double)*N); 
-    for (i=0; i<N; i++) dVHart_Grid[i] = 0.0;
+	
+	// added by Xiwen Li
+	Vlr_Grid = (double **)malloc(sizeof(double*)*(Matomnum+MatomnumF+MatomnumS+2));
+	for(Mc_AN=0;Mc_AN<(Matomnum+MatomnumF+MatomnumS+2);Mc_AN++){
+		Vlr_Grid[Mc_AN] = (double *)malloc(sizeof(double)*N);
+	}
+	
 
     if (SpinP_switch==3){ /* spin non-collinear */
       Vpot_Grid = (double**)malloc(sizeof(double*)*4); 
@@ -3059,6 +3099,13 @@ double truncation(int MD_iter,int UCell_flag)
     dVHart_Grid_B = (double*)malloc(sizeof(double)*My_Max_NumGridB); 
     for (i=0; i<My_Max_NumGridB; i++) dVHart_Grid_B[i] = 0.0;
 
+	// added by Xiwen Li
+	Vlr_Grid_B = (double **)malloc(sizeof(double*)*(Matomnum+MatomnumF+MatomnumS+2));
+	for(Mc_AN=0;Mc_AN<(Matomnum+MatomnumF+MatomnumS+2);Mc_AN++){
+		Vlr_Grid_B[Mc_AN] = (double *)malloc(sizeof(double)*My_Max_NumGridB);
+	}	
+	
+	
     if ( (core_hole_state_flag==1 && Scf_RestartFromFile==1) || scf_coulomb_cutoff_CoreHole==1 ){
       dVHart_Periodic_Grid_B = (double*)malloc(sizeof(double)*My_Max_NumGridB); 
       Density_Periodic_Grid_B = (double*)malloc(sizeof(double)*My_Max_NumGridB); 

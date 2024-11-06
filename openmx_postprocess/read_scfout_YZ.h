@@ -255,4 +255,16 @@ size: OLP_L
 *******************************************************/
 double *****OLP_L;
 
+/*******************************************************
+double *****Hlr;
+  long range Coulomb matrix element caused by effective net point charge of atoms. 
+  added by Xiwen Li
+size: Hlr[atomnum+1]
+[atomnum+1]
+[FNAN[ct_AN]+1]
+[Total_NumOrbs[ct_AN]]
+[Total_NumOrbs[h_AN]]
+ *******************************************************/
+double *****Hlr;
+
 #endif

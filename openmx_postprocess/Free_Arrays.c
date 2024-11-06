@@ -131,6 +131,11 @@ void array0()
 
     free(RefVxc_Grid);
     free(dVHart_Grid);
+	// added by Xiwen Li	
+	for(Mc_AN=0;Mc_AN<(Matomnum+MatomnumF+MatomnumS+2);Mc_AN++){
+		free(Vlr_Grid[Mc_AN]);
+	}	
+	free(Vlr_Grid);
 
     if ((core_hole_state_flag == 1 && Scf_RestartFromFile == 1) || scf_coulomb_cutoff_CoreHole == 1)
     {
@@ -178,6 +183,11 @@ void array0()
     free(PCCDensity_Grid_B[1]);
     free(PCCDensity_Grid_B[0]);
     free(dVHart_Grid_B);
+	// added by Xiwen Li
+	for(Mc_AN=0;Mc_AN<(Matomnum+MatomnumF+MatomnumS+2);Mc_AN++){
+		free(Vlr_Grid_B[Mc_AN]);
+	}	
+	free(Vlr_Grid_B);
     free(RefVxc_Grid_B);
 
     if (SpinP_switch == 3)

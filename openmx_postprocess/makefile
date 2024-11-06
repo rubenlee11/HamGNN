@@ -10,15 +10,22 @@
 #FC = mpif90 -O3 -xHOST -ip -no-prec-div -qopenmp
 #LIB= -L${MKLROOT}/lib/intel64 -L/opt/compiler/intel2018u4/compilers_and_libraries_2018.5.274/linux/lib -lmkl_scalapack_lp64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkl_blacs_openmpi_lp64 -lmpi_usempif08 -lmpi_usempi_ignore_tkr -lmpi_mpifh -liomp5 -lpthread -lm -ldl -lifcore -lgsl -lgslcblas -lm
 
-GSL_lib = /data/home/yzhong/Tools/gsl-2.7.1/lib
-GSL_include = /data/home/yzhong/Tools/gsl-2.7.1/include
-MKLROOT = /opt/compiler/intel2018u4/compilers_and_libraries_2018.5.274/linux/mkl
-CMPLR_ROOT = /opt/compiler/intel2018u4/compilers_and_libraries_2018.5.274
-CC = mpiicc -O3 -xHOST -ip -no-prec-div -qopenmp -I${MKLROOT}/include/fftw -I${MKLROOT}/include -I${GSL_include} -DDERIVATIVE
-FC = mpiifort -O3 -xHOST -ip -no-prec-div -qopenmp -I${MKLROOT}/include
-LIB = ${CMPLR_ROOT}/linux/compiler/lib/intel64_lin/libiomp5.a ${MKLROOT}/lib/intel64/libmkl_blas95_lp64.a ${MKLROOT}/lib/intel64/libmkl_lapack95_lp64.a ${MKLROOT}/lib/intel64/libmkl_scalapack_lp64.a -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_intel_lp64.a ${MKLROOT}/lib/intel64/libmkl_intel_thread.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_lp64.a -Wl,--end-group ${CMPLR_ROOT}/linux/compiler/lib/intel64_lin/libifcoremt.a -lpthread -lm -ldl ${GSL_lib}/libgsl.a
+GSL_lib = /usr/local/lib
+GSL_include = /usr/local/include/gsl
+#MKLROOT = /opt/compiler/intel2018u4/compilers_and_libraries_2018.5.274/linux/mkl
+#CMPLR_ROOT = /opt/compiler/intel2018u4/compilers_and_libraries_2018.5.274
+#CC = mpiicc -O3 -xHOST -ip -no-prec-div -qopenmp -I${MKLROOT}/include/fftw -I${MKLROOT}/include -I${GSL_include} -DDERIVATIVE
+#FC = mpiifort -O3 -xHOST -ip -no-prec-div -qopenmp -I${MKLROOT}/include
+#LIB = ${CMPLR_ROOT}/linux/compiler/lib/intel64_lin/libiomp5.a ${MKLROOT}/lib/intel64/libmkl_blas95_lp64.a ${MKLROOT}/lib/intel64/libmkl_lapack95_lp64.a ${MKLROOT}/lib/intel64/libmkl_scalapack_lp64.a -Wl,--start-group ${MKLROOT}/lib/intel64/libmkl_intel_lp64.a ${MKLROOT}/lib/intel64/libmkl_intel_thread.a ${MKLROOT}/lib/intel64/libmkl_core.a ${MKLROOT}/lib/intel64/libmkl_blacs_intelmpi_lp64.a -Wl,--end-group ${CMPLR_ROOT}/linux/compiler/lib/intel64_lin/libifcoremt.a -lpthread -lm -ldl ${GSL_lib}/libgsl.a
 
+FFTROOT = /usr/local/Cellar/fftw/3.3.10_1
+LBSROOT = /usr/local/Cellar/lapack/3.12.0
+openmp_flag = -fopenmp
+fortran_lib = -lgfortran
 
+CC = mpicc -O3 -Xpreprocessor -fopenmp -Xclang $(openmp_flag) -I/$(FFTROOT)/include -I/$(LBSROOT)/include -I/usr/local/Cellar/libomp/17.0.6/include -Wno-error=implicit-function-declaration -Dnosse
+FC = mpif90 -O3 -ffast-math -march=native -fopenmp -Dnosse -fallow-argument-mismatch
+LIB= -L/usr/local/opt/openblas/lib -L/usr/local/Cellar/libomp/17.0.6/lib -L/usr/local/Cellar/scalapack/2.2.0_1/lib -L/usr/local/opt/gcc/lib/gcc/14 -L/$(GSL_lib) -L/$(FFTROOT)/lib -L/usr/local/Cellar/open-mpi/5.0.2/lib -L/$(LBSROOT)/lib -lmpi_mpifh -llapack -lgfortran -lgsl -lfftw3 -lscalapack -lomp -lopenblas
 #
 # System B (Sekirei) at ISSP, Univ. of Tokyo
 #

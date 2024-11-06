@@ -429,7 +429,7 @@ void Output( FILE *fp, char *inputfile )
       ID = G2ID[Gc_AN];
 
       if (myid==ID){
-
+        printf("%d\n",ID);
         num = 0;
 
         Mc_AN = F_G2M[Gc_AN];
@@ -444,10 +444,13 @@ void Output( FILE *fp, char *inputfile )
             for (i=0; i<TNO1; i++){
               for (j=0; j<TNO2; j++){
                 Tmp_Vec[num] = H[spin][Mc_AN][h_AN][i][j];
+              printf("%f ",ID,Tmp_Vec[num]);
                 num++;
-	      }
+	            }
+              printf("\n");
             }
-          }
+            printf("\n");
+          }          
           else{
             for (i=0; i<TNO1; i++){
               for (j=0; j<TNO2; j++){
@@ -586,6 +589,52 @@ void Output( FILE *fp, char *inputfile )
 
   }
 
+
+  /***************************************************************
+    long range Coulomb matrix element caused by effective net point charge of atoms.
+    added by Xiwen Li
+  ****************************************************************/
+  for (int idx_P = 1; idx_P<=atomnum; idx_P++){
+    for (Gc_AN=1; Gc_AN<=atomnum; Gc_AN++){
+      ID = G2ID[Gc_AN];
+      if (myid==ID){
+        num = 0;
+        printf("%d\n",ID);
+        Mc_AN = F_G2M[Gc_AN];
+        wan1 = WhatSpecies[Gc_AN];
+        TNO1 = Spe_Total_CNO[wan1];
+        for (h_AN=0; h_AN<=FNAN[Gc_AN]; h_AN++){
+          Gh_AN = natn[Gc_AN][h_AN];
+          wan2 = WhatSpecies[Gh_AN];
+          TNO2 = Spe_Total_CNO[wan2];
+          for (i=0; i<TNO1; i++){
+            for (j=0; j<TNO2; j++){              
+              Tmp_Vec[num] = Hlr[1][Mc_AN][h_AN][i][j];
+              printf("%f ",ID,Tmp_Vec[num]);
+              num++;
+            }
+            printf("\n");
+          }
+          printf("\n");
+        }
+        if (myid!=Host_ID){
+          MPI_Isend(&num, 1, MPI_INT, Host_ID, tag, mpi_comm_level1, &request);
+          MPI_Wait(&request,&stat);
+          MPI_Isend(&Tmp_Vec[0], num, MPI_DOUBLE, Host_ID, tag, mpi_comm_level1, &request);
+          MPI_Wait(&request,&stat);
+	      }
+        else{
+          fwrite(Tmp_Vec, sizeof(double), num, fp);
+        }
+      }
+      else if (ID!=myid && myid==Host_ID){
+        MPI_Recv(&num, 1, MPI_INT, ID, tag, mpi_comm_level1, &stat);
+        MPI_Recv(&Tmp_Vec[0], num, MPI_DOUBLE, ID, tag, mpi_comm_level1, &stat);
+        fwrite(Tmp_Vec, sizeof(double), num, fp);
+      }
+    }
+  } 
+
   /***************************************************************
       The derivatives of overlap matrix (Added by Yang Zhong)
   ****************************************************************/
@@ -718,6 +767,7 @@ void Output( FILE *fp, char *inputfile )
 
   free(Tmp_Vec_3);
 #endif
+
 
   /***************************************************************
                   DM and iDM: density matrix
