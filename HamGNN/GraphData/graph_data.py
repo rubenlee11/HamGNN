@@ -77,3 +77,4 @@ class graph_data_module(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_data, batch_size=self.test_batch_size, pin_memory=True)
+

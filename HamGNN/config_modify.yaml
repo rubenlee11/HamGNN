@@ -1,0 +1,156 @@
+dataset_params:
+  batch_size: 1
+  database_type: db
+  max_num_nbr: 32
+  radius: 6.0
+  split_file: null
+  test_ratio: 0.1
+  train_ratio: 0.8
+  val_ratio: 0.1
+  graph_data_path: /public/home/zhongyang/xwen/ZnO_0001/DFT_dataset/toplayers # Directory where graph_data.npz is located
+
+losses_metrics:
+  losses:
+  - loss_weight: 27.213
+    metric: mae
+    prediction: hamiltonian
+    target: hamiltonian
+  - loss_weight: 27.213
+    metric: mae
+    prediction: total_energy
+    target: total_energy
+  #- loss_weight: 0.01
+   # metric: mae
+   # prediction: overlap_hamiltonian
+   # target: overlap_hamiltonian
+  #- loss_weight: 1.0
+  #  metric: mae
+  #  prediction: band_gap
+  #  target: band_gap
+  #- loss_weight: 0.001
+   # metric: mae
+   # prediction: band_energy
+    #target: band_energy
+  #- loss_weight: 1.0
+  #  metric: mae
+  #  prediction: overlap
+  #  target: overlap
+  #- loss_weight: 1.0
+  #  metric: mae
+  #  prediction: peak
+  #  target: peak
+  #- loss_weight: 0.0
+  #  metric: mae
+  #  prediction: hamiltonian_imag
+  #  target: hamiltonian_imag
+  #- loss_weight: 0.0001
+  #  metric: abs_mae
+  #  prediction: wavefunction
+  #  target: wavefunction
+  metrics:
+  - metric: mae
+    prediction: hamiltonian
+    target: hamiltonian
+  - metric: mae
+    prediction: total_energy
+    target: total_energy
+ # - metric: mae
+   # prediction: overlap_hamiltonian
+   # target: overlap_hamiltonian
+  #- metric: mae
+  #  prediction: band_gap
+  #  target: band_gap
+  #- metric: mae
+  #  prediction: peak
+  #  target: peak
+  #- metric: mae
+  #  prediction: overlap
+  #  target: overlap
+  #- metric: mae
+  #  prediction: hamiltonian_imag
+  #  target: hamiltonian_imag
+  #- metric: mae
+  #  prediction: hamiltonian_imag
+  #  target: hamiltonian_imag
+  # - metric: mae
+  #  prediction: band_energy
+  #  target: band_energy
+  #- metric: abs_mae
+  #  prediction: wavefunction
+  #  target: wavefunction
+
+# Generally, the optim_params module only needs to set the initial learning rate (lr)
+optim_params:
+  lr: 0.01
+  lr_decay: 0.5
+  lr_patience: 5
+  gradient_clip_val: 0.0
+  max_epochs: 3000
+  min_epochs: 100
+  stop_patience: 30
+
+output_nets:
+  output_module: HamGNN_out
+  HamGNN_out:
+    create_graph: false # 预留参数，不用管，暂时无用
+    return_forces: false # 预留参数，不用管，暂时无用
+    include_triplet: false # 预留参数，不用管，暂时无用
+    ham_only: true # true: 只计算哈密顿量H； 'false': 拟合H和S
+    ham_type: openmx # openmx: 拟合openmx的哈密顿量, abacus: 拟合abacus的哈密顿量
+    nao_max: 26 # 根据数据集中原子最大轨道数进行修改，可选14, 19或27
+    add_H0: True # 一般时候为true，预测H_scf加上H_nonscf
+    symmetrize: true # 对哈密顿量施加厄密性约束，保证输出哈密顿量满足厄密性
+    calculate_band_energy: false # 是否计算能带以对能带进行训练
+    num_k: 5 # 当计算能带时，所使用的k点数
+    band_num_control: 8 # dict:控制每种原子在能带计算时考虑多少个基底； int: [VBM-num, VBM+num]； null: all bands
+    k_path: null # 'auto': 自动确定k点路径. null: 随机k点. list: 用户自己确定的k点路径列表
+    soc_switch: false # true：拟合SOC哈密顿量
+    nonlinearity_type: norm # norm or gate
+    export_reciprocal_values: false # 计算电声耦合矩阵epc时才有用，平时保持false  
+    longrange: True # 预测atomic charge，长程ewald求和修正哈密顿量
+
+
+profiler_params:
+  progress_bar_refresh_rat: 1
+  train_dir: /public/home/zhongyang/xwen/ZnO_0001/ML_train/longrange  #The folder for saving training information and prediction results. This directory can be read by tensorboard to monitor the training process.
+
+representation_nets:
+  # 网络参数通常无需改动
+  HamGNN_pre:
+    cutoff: 18.0
+    resnet: True
+    cutoff_func: cos
+    edge_sh_normalization: component
+    edge_sh_normalize: true
+    ######## Irreps set 1 (crystal): ################
+    feature_irreps_hidden: 64x0e+64x0o+32x1o+16x1e+8x2o+20x2e+8x3o+4x3e+4x4e
+    irreps_edge_output: 64x0e+64x0o+32x1o+16x1e+8x2o+20x2e+8x3o+4x3e+4x4e
+    irreps_edge_sh: 0e + 1o + 2e + 3o + 4e
+    irreps_node_features: 64x0e+64x0o+32x1o+16x1e+8x2o+20x2e+8x3o+4x3e+4x4e
+    irreps_node_output: 64x0e+64x0o+32x1o+16x1e+8x2o+20x2e+8x3o+4x3e+4x4e
+    irreps_triplet_output: 64x0e+64x0o+32x1o+16x1e+8x2o+20x2e+8x3o+4x3e+4x4e
+    invariant_layers: 3
+    invariant_neurons: 64
+    num_interaction_layers: 5
+    num_radial: 64
+    num_spherical: 32
+    export_triplet: false
+    rbf_func: bessel
+    set_features: true
+    add_edge_tp: false
+    num_types: 64
+    irreps_node_prev: 16x0o+16x0e+8x1o+8x1e+8x2e+8x2o+8x3o+8x3e+8x4o+8x4e
+    num_node_attr_feas: 64
+
+setup:
+  GNN_Net: HamGNN_pre # HamGNN_pre, HamGNN_pre2
+  accelerator: null
+  ignore_warnings: true
+  checkpoint_path: /public/home/zhongyang/xwen/ZnO_0001/ML_train/ESM/version_2/checkpoints/epoch=36-val_loss=0.000000.ckpt
+  l_minus_mean: false
+  load_from_checkpoint: false
+  resume: false
+  num_gpus: 1
+  precision: 32
+  property: hamiltonian
+  stage: fit

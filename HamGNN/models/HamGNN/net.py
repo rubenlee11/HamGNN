@@ -57,6 +57,7 @@ from .nequip.nn.embedding import (
     Embedding_block_q
 )
 
+from .ee4G.ee4G import cal_atomic_charge
 
 class residual_block(torch.nn.Module):
     """
@@ -930,7 +931,7 @@ class HamGNN_out(nn.Module):
     
     def __init__(self, irreps_in_node: Union[int, str, o3.Irreps]=None, irreps_in_edge: Union[int, str, o3.Irreps]=None, irreps_in_triplet: Union[int, str, o3.Irreps]=None, nao_max: int = 14, return_forces=False, create_graph=False, 
                  ham_type: str='openmx', ham_only: bool = False, symmetrize: bool=True, include_triplet: bool = False, calculate_band_energy: bool = False, num_k: int = 8, 
-                 k_path:Union[list, np.array, tuple]=None, band_num_control:dict=None, soc_switch:bool=True, nonlinearity_type:str='norm', export_reciprocal_values: bool = False, add_H0:bool= False, soc_basis: str='so3'):
+                 k_path:Union[list, np.array, tuple]=None, band_num_control:dict=None, soc_switch:bool=True, nonlinearity_type:str='norm', export_reciprocal_values: bool = False, add_H0:bool= False, soc_basis: str='so3',longrange=False):
 
         
         """
@@ -1480,6 +1481,11 @@ class HamGNN_out(nn.Module):
                                                  nonlinearity_type = self.nonlinearity_type, resnet=True)
             self.offsitenet_s = Ham_layer(irreps_in=irreps_in_edge, feature_irreps_hidden=irreps_in_edge, irreps_out=self.ham_irreps, 
                                                  nonlinearity_type = self.nonlinearity_type, resnet=True)
+            
+        # added by Xiwen Li,
+        self.longrange = longrange
+        if self.longrange:
+            self.charge_net = ScaleShiftMACE             
                  
     def _init_irreps(self):
         """
@@ -2221,6 +2227,10 @@ class HamGNN_out(nn.Module):
         return coefficient.view(coefficient.shape[0], -1)
          
     def forward(self, data, graph_representation: dict = None):
+        # predict atomic net charge. added by Xiwen Li
+        if self.longrange:            
+            total_energy = cal_atomic_charge(data.ee4G)
+                        
         # prepare data.hamiltonian & data.overlap
         if 'hamiltonian' not in data:
             data.hamiltonian = self.cat_onsite_and_offsite(data, data.Hon, data.Hoff)
@@ -2482,7 +2492,10 @@ class HamGNN_out(nn.Module):
                 band_energy = None
                 wavefunction = None
                 gap = None
-                H_sym = None
+                H_sym = None 
+                               
+
+        
         
         # Combining on-site and off-site Hamiltonians
         # openmx
@@ -2493,7 +2506,14 @@ class HamGNN_out(nn.Module):
                           'wavefunction': wavefunction, 'iHon': Hsoc_on_imag, 'iHoff': Hsoc_off_imag}
             else:
                 H = self.cat_onsite_and_offsite(data, Hon, Hoff)
-                result = {'hamiltonian': H, 'band_energy': band_energy, 'wavefunction': wavefunction, 'band_gap':gap, 'H_sym': H_sym}
+                # add long range hamiltonian, return total energy predicted by charge net. added by Xiwen Li
+                if self.longrange:
+                    pos = data.pos
+                    for idx_p in range(pos.shape[0]):
+                        Hlr_p = self.cat_onsite_and_offsite(data, data.Hlron[idx_p], data.Hlroff[idx_p])
+                        H += data.ee4G.atomic_charges[idx_p]*Hlr_p               
+                
+                result = {'hamiltonian': H, 'band_energy': band_energy, 'wavefunction': wavefunction, 'band_gap':gap, 'H_sym': H_sym, 'total_energy': total_energy/data.num_electrons}
                 if self.export_reciprocal_values:
                     result.update({'HK':HK, 'SK':SK, 'dSK': dSK})
         else:

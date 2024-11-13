@@ -27,7 +27,8 @@ import warnings
 import sys
 from .models.utils import get_hparam_dict
 import argparse
-
+from .models.HamGNN.ee4G.ee4G_data_utils import atomic_numbers_to_indices
+from .models.HamGNN.ee4G.ee4G_torch_tools import to_one_hot
 
 def prepare_data(config):
     train_ratio = config.dataset_params.train_ratio
@@ -48,6 +49,17 @@ def prepare_data(config):
     graph_data = np.load(graph_data_path, allow_pickle=True)
     graph_data = graph_data['graph'].item()
     graph_dataset = list(graph_data.values())
+    
+    # Prepare data for charge prediction block. test ZnO. added by Xiwen Li.
+    if config.longrange:
+        z_table = np.array([8,30])
+        for data in graph_dataset:
+            indices = atomic_numbers_to_indices(data.z, z_table=z_table)
+            one_hot = to_one_hot(torch.tensor(indices, dtype=torch.long).unsqueeze(-1),num_classes=len(z_table))
+            data["node_attrs"] = one_hot
+            data["positions"] = data.pos
+            data["shifts"] = data.nbr_shift
+            data["unit_shifts"] = data.cell_shift
 
     graph_dataset = graph_data_module(graph_dataset, train_ratio=train_ratio, val_ratio=val_ratio, test_ratio=test_ratio, 
                                         batch_size=batch_size, split_file=split_file)
@@ -181,7 +193,7 @@ def build_model(config):
         output_module = HamGNN_out(irreps_in_node = Gnn_net.irreps_node_output, irreps_in_edge = Gnn_net.irreps_edge_output, nao_max= output_params.nao_max, ham_type= output_params.ham_type,
                                          ham_only= output_params.ham_only, symmetrize=output_params.symmetrize,calculate_band_energy=output_params.calculate_band_energy,num_k=output_params.num_k,k_path=output_params.k_path,
                                          band_num_control=output_params.band_num_control, irreps_in_triplet = Gnn_net.irreps_triplet_output if Gnn_net.export_triplet else None, 
-                                         soc_switch=output_params.soc_switch, nonlinearity_type = output_params.nonlinearity_type, add_H0=output_params.add_H0)
+                                         soc_switch=output_params.soc_switch, nonlinearity_type = output_params.nonlinearity_type, add_H0=output_params.add_H0,longrange = output_params.longrange)
 
     else:
         print('Evaluation of this property is not supported!')
@@ -205,7 +217,7 @@ def train_and_eval(config):
     
     # Training
     if config.setup.stage == 'fit':
-        # laod network weights
+        # load network weights
         if config.setup.load_from_checkpoint and not config.setup.resume:
             model = Model.load_from_checkpoint(checkpoint_path=config.setup.checkpoint_path,
             representation=graph_representation,

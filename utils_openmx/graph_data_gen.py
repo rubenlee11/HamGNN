@@ -5,6 +5,8 @@ Author: Yang Zhong
 Date: 2022-11-24 19:07:54
 LastEditors: Yang Zhong
 LastEditTime: 2023-12-18 16:13:22
+
+edit by Xiwen Li at 2024-11-2, read Hlron and Hlroff
 '''
 
 import json
@@ -102,6 +104,9 @@ def main():
                     coordinates += item[1:]
                 z = atomic_numbers = np.array([Element[s].Z for s in species])
                 coordinates = np.array([float(pos) for pos in coordinates]).reshape(-1, 3)/au2ang
+                # total valence electrons. normalize total energy to compare it with orbital energy. added by Xiwen Li
+                valence = np.array([num_valence.Element[s].Z for s in species])
+                num_electrons = np.sum(valence)
         except:
             continue
         
@@ -196,7 +201,7 @@ def main():
                 iHon0 = load_dict['iHon']
                 iHoff0 = load_dict['iHoff']
                 Lon = load_dict['Lon']
-                Loff = load_dict['Loff']
+                Loff = load_dict['Loff']            
 
                 # initialize Hks0 and iHks0
                 num_sub_matrix = pos.shape[0] + edge_index.shape[1]
@@ -331,10 +336,16 @@ def main():
                     continue
                 Hon0 = load_dict['Hon'][0]
                 Hoff0 = load_dict['Hoff'][0]
+                # added by Xiwen Li
+                Hlron = load_dict['Hlron']
+                Hlroff = load_dict['Hlroff']                
         
                 #
                 num_sub_matrix = pos.shape[0] + edge_index.shape[1]
                 H0 = np.zeros((num_sub_matrix, nao_max**2))
+                
+                Hlr = np.zeros((pos.shape[0],num_sub_matrix, nao_max**2))
+                
                 
                 for i, sub_maxtrix_H in enumerate(Hon0):
                     mask = np.zeros((nao_max, nao_max), dtype=int)
@@ -351,6 +362,24 @@ def main():
                     mask = (mask > 0).reshape(-1)
                     H0[num + len(z)][mask] = np.array(sub_maxtrix_H)
                     num = num + 1
+                #
+                for idx_p in range(pos.shape[0]):
+                    for i, sub_maxtrix_Hlr in enumerate(Hlron[idx_p]):
+                        mask = np.zeros((nao_max, nao_max), dtype=int)
+                        src = z[i]
+                        mask[basis_def[src][:,None], basis_def[src][None,:]] = 1
+                        mask = (mask > 0).reshape(-1)
+                        Hlr[idx_p][i][mask] = np.array(sub_maxtrix_Hlr)
+                
+                    num = 0
+                    for i, sub_maxtrix_Hlr in enumerate(Hlroff[idx_p]):
+                        mask = np.zeros((nao_max, nao_max), dtype=int)
+                        src, tar = z[edge_index[0,num]], z[edge_index[1,num]]
+                        mask[basis_def[src][:,None], basis_def[tar][None,:]] = 1
+                        mask = (mask > 0).reshape(-1)
+                        Hlr[idx_p][num + len(z)][mask] = np.array(sub_maxtrix_Hlr)
+                        num = num + 1                      
+                              
             os.system("rm HS.json")
             
             # save in Data
@@ -371,6 +400,9 @@ def main():
                                 Hoff0 = torch.FloatTensor(H0[pos.shape[0]:,:]),
                                 Son = torch.FloatTensor(S[:pos.shape[0],:]),
                                 Soff = torch.FloatTensor(S[pos.shape[0]:,:]),
+                                Hlron = torch.FloatTensor(Hlr[:,:pos.shape[0],:]),
+                                Hlroff =  torch.FloatTensor(Hlr[:,pos.shape[0]:,:]),
+                                num_electrons = num_electrons,
                                 doping_charge = torch.FloatTensor([doping_charge]))
     
     graph_data_path = os.path.join(graph_data_path, 'graph_data.npz')

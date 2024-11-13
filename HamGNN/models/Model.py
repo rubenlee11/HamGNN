@@ -20,11 +20,11 @@ import pandas as pd
 
 class Model(pl.LightningModule):
     def __init__(
-            self,
+            self,       
             representation: nn.Module,
             output: nn.Module,
             losses: List[Dict],
-            validation_metrics: List[Dict],
+            validation_metrics: List[Dict],            
             lr: float = 1e-3,
             lr_decay: float = 0.1,
             lr_patience: int = 100,
@@ -34,13 +34,13 @@ class Model(pl.LightningModule):
             beta2: float = 0.999,
             amsgrad: bool = True,
             max_points_to_scatter: int = 100000,
-            post_processing: callable = None
+            post_processing: callable = None,                                   
             ):
         super().__init__()
 
         self.representation = representation
         self.output_module = output
-
+        
         self.losses = losses
         self.metrics = validation_metrics
 
@@ -225,6 +225,7 @@ class Model(pl.LightningModule):
     def forward(self, data):
         # torch.set_grad_enabled(True)
         self._enable_grads(data)
+        
         representation = self.representation(data)
         pred = self.output_module(data, representation)
         return pred
